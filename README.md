@@ -29,10 +29,10 @@ optional arguments:
 ```
 
 #### Example:
-`./python gene_age_prediction.py -i test.csv -s supliment.csv -o alignment_filtred.blast6out`
+`python gene_age_prediction.py -i test.csv -s supliment.csv -o alignment_filtred.blast6out`
 
-`blastp -query query.fasta -db target_idx.fasta -outfmt 6 | python3 gene_age_pred.py --n_jobs 2 --thr_other 5 --thr_young 2 > aling.csv` - with stdin, stderr and stdout application.
+`blastp -query query.fasta -db target_idx.fasta -outfmt 6 | python gene_age_pred.py --n_jobs 2 --thr_other 5 --thr_young 2 > aling.csv` - with stdin, stderr and stdout application.
 
-`python3 gene_age_pred.py < test.csv 1> aling.csv 2> suplim.csv` 
+`python gene_age_pred.py < test.csv 1> aling.csv 2> suplim.csv` 
 
-`./python gene_age_prediction.py -i test.csv -s supliment.csv -o alignment_filtred.blast6out --thr_other 7 --thr_young 2  --n_jobs 4` - full calling line
+`python gene_age_prediction.py -i test.csv -s supliment.csv -o alignment_filtred.blast6out --thr_other 7 --thr_young 2  --n_jobs 4` - full calling line
