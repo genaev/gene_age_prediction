@@ -185,7 +185,7 @@ for i in range(1, 11):
 df = df.replace([np.inf, -np.inf], np.nan).fillna(-999)
 
 feature_calculators_module = sys.modules['tsfresh.feature_extraction.feature_calculators']
-processed_list = Parallel(n_jobs=n_jobs)(delayed(extraction_ts_traits)(i, df, params) for i in tqdm(params.keys()))
+processed_list = Parallel(n_jobs=n_jobs)(delayed(extraction_ts_traits)(i, df, params) for i in params.keys())
 df = pd.concat([df, *processed_list], axis=1)
 
 model = CatBoostClassifier(task_type="CPU")
