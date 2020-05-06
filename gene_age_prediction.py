@@ -35,7 +35,7 @@ if args.outfile is None and args.output is None:
     exit(1)
 
 if args.errfile is None and args.supplementary is None:
-    print("Error: output file not defined")
+    print("Error: errfile file not defined")
     exit(1)
 
 if type(args.thr_other) != int and type(args.thr_young) != int:
