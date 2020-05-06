@@ -1,2 +1,4 @@
 .idea
-lib_inst.py
+/lib_inst.py
+/alignment_filtred.blast6out
+/log.txt

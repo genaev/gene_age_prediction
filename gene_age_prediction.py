@@ -13,9 +13,9 @@ import argparse
 from collections import defaultdict
 
 parser = argparse.ArgumentParser()
-parser.add_argument('infile', nargs='?', type=argparse.FileType('r'), help="input alignment blast6out file")
+parser.add_argument('infile', nargs='?', help="input alignment blast6out file")
 parser.add_argument('errfile', nargs='?', type=argparse.FileType('w'), help="output log file")
-parser.add_argument('outfile', nargs='?', type=argparse.FileType('w'), help="output alignment blast6out file")
+parser.add_argument('outfile', nargs='?', help="output alignment blast6out file")
 parser.add_argument("-i", "--input", help="input filename")
 # parser.add_argument("-d", "--input_dir", help = "input file directory")
 parser.add_argument("-s", "--supplementary", help="output supplementary file")
@@ -23,9 +23,10 @@ parser.add_argument("-o", "--output", help="output filename")
 # parser.add_argument("--file_type", default=".csv", help = "type of every file in dictionary")
 parser.add_argument("--thr_other", default=10, type=int, help="threshold for other age groups")
 parser.add_argument("--thr_young", default=5, type=int, help="threshold for young age group")
+parser.add_argument("--n_jobs", default=1, type=int, help="jobs number")
 args = parser.parse_args()
 
-if (args.infile is None and args.input is None) or (not os.path.isfile(args.input)):
+if args.infile is None and args.input is None:
     print("Error: input file not found")
     exit(1)
 
@@ -33,7 +34,13 @@ if args.outfile is None and args.output is None:
     print("Error: output file not defined")
     exit(1)
 
-#ToDo: Нужно добавить проверики корректности параметров для остальных опций. Например thr_other и thr_young это целые чсла от 1 до 10.
+if args.errfile is None and args.supplementary is None:
+    print("Error: output file not defined")
+    exit(1)
+
+if type(args.thr_other) != int and type(args.thr_young) != int:
+    print("Error: input integer value")
+    exit(1)
 
 def list_slice(s, step):
     s = list(itertools.chain.from_iterable(s))
@@ -68,33 +75,31 @@ def extraction_ts_traits(col_name, df, params):
             res[trait_name] = df[list(df.filter(regex=f'{col_name}_\d+'))].apply(func, raw=True, axis=1)
     return res
 
-
-# ToDo: все эти засекания вермени нужно удалить из финальной версии
-start = time.time()
-
 if args.input:
     reader = csv.reader(open(args.input, 'r'), delimiter='\t')
 if args.infile:
     reader = csv.reader(open(args.infile, 'r'), delimiter='\t')
 data = defaultdict(list)
-nan_line = [np.nan] * 10
+nan_line = [np.nan] * 11
 all_lis = []
 for row in reader:
     if len(data[row[0]]) >= 10:
         pass
     else:
-        data[row[0]].append(row[2:])
+        data[row[0]].append(row[1:])
 key_list = []
+target=[]
 for k, i in data.items():
     key_list.append(k)
     n2 = len(i)
     while n2 < 10:
         i.append(nan_line)
         n2 = n2 + 1
-    parse = list_slice(i, len(i))
+    parse = list_slice(i, 11)
     lis = list(itertools.chain.from_iterable(parse))
-    lis = [float(i) for i in lis]
-    all_lis.append(lis)
+    target.append(lis[:10])
+    lis1 = [float(i) for i in lis[10:]]
+    all_lis.append(lis1)
 my_df = pd.DataFrame(data=all_lis, columns=['Percent identity_1', 'Percent identity_2', 'Percent identity_3',
                                             'Percent identity_4', 'Percent identity_5', 'Percent identity_6',
                                             'Percent identity_7', 'Percent identity_8',
@@ -147,10 +152,12 @@ my_df = pd.DataFrame(data=all_lis, columns=['Percent identity_1', 'Percent ident
                                             'Bit score_5', 'Bit score_6', 'Bit score_7', 'Bit score_8', 'Bit score_9',
                                             'Bit score_10'])
 
-print(time.time() - start)
+my_df['Target_1','Target_2','Target_3','Target_4',
+       'Target_5','Target_6','Target_7','Target_8',
+       'Target_9','Target_10'] = target
+
 model_file = "model_14traits.cbm"
-# ToDo: n_jobs нужно иметь возможность менять из опций коммандной строки.
-n_jobs = 1
+n_jobs = args.n_jobs
 params = {'Target len mismatches ratio': {'quantile': [{'q': 0.1}, {'q': 0.6}],
                                           'fft_coefficient': [{'coeff': 0, 'attr': 'abs'}],
                                           'abs_energy': None},
@@ -199,16 +206,12 @@ for i in range(1, 11):
 df = df.replace([np.inf, -np.inf], np.nan).fillna(-999)
 
 feature_calculators_module = sys.modules['tsfresh.feature_extraction.feature_calculators']
-# ToDo: Нужно провести исследовательскую работу на сколько, как параллельные вычисления влияют на фактическую производительность
-# проверь насколько ray будет быстрее Parallel. кроме этого нужно проверить производительность обработки в один поток.
-# см. тетрадку tsfresh_feature_calculators_time.ipynb. при обработке в один поток потом не нужно делать pd.concat, возможно так даже быстрее будет.
 processed_list = Parallel(n_jobs=n_jobs)(delayed(extraction_ts_traits)(i, df, params) for i in tqdm(params.keys()))
 df = pd.concat([df, *processed_list], axis=1)
 
 model = CatBoostClassifier(task_type="CPU")
 model.load_model(model_file)
 predict = model.predict(df[feats])
-print(time.time() - start)
 
 df['preds'] = predict
 df['Id'] = key_list
@@ -217,31 +220,27 @@ df['other,%'] = predict_probs[:, 0]
 df['young,%'] = predict_probs[:, 1]
 
 
-#ToDo Происходит запись лога дважды. Нужно исправить.
-age = df[['Id', 'preds', "other,%", "young,%"]]
+age = df[['Query', 'class', "other_prob", "young_prob"]]
 if args.errfile:
     age.to_csv(args.errfile, index=False, mode='a', sep='\t')
 if args.supplementary:
     age.to_csv(args.supplementary, index=False, mode='a', sep='\t')
 ag = age.groupby('preds')
 
-# Индексация по Id гена
+# index by gene ID
 df = df.set_index('Id')
 
-#ToDo тут сейчас в output нету поля target. Нужно добавить.
-# я переписал сохранение результата у меня на ноуте вся прогамма работает 0.28
-# версия, которую ты мне прислал работает 3.1 сек, что в 11 раз дольше.
-with open(args.output, 'w') as result_file:
-    wr = csv.writer(result_file, delimiter='\t', lineterminator='\n')
-    for k, v in data.items():
-        age = df.loc[k].preds
-        if age == 'other' and args.thr_young < 10:
-            v = v[:args.thr_other]
-        elif age == 'young' and args.thr_young < 10:
-            v = v[:args.thr_young]
-        for row in v:
-            row.insert(0, k)
-            wr.writerow(row)
 
-
-print(time.time() - start)
+if args.output:
+   wr = csv.writer(open(args.output, 'w'), delimiter='\t', lineterminator='\n')
+if args.outfile:
+   wr = csv.writer(open(args.outfile, 'w'), delimiter='\t', lineterminator='\n')
+for k, v in data.items():
+    age = df.loc[k].preds
+    if age == 'other' and args.thr_young < 10:
+        v = v[:args.thr_other]
+    elif age == 'young' and args.thr_young < 10:
+        v = v[:args.thr_young]
+    for row in v:
+        row.insert(0, k)
+        wr.writerow(row)
