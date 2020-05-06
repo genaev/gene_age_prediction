@@ -198,8 +198,6 @@ predict_probs = model.predict_proba(df[feats])
 df['other,%'] = predict_probs[:, 0]
 df['young,%'] = predict_probs[:, 1]
 
-
-#ToDo Происходит запись лога дважды. Нужно исправить.
 age = df[['Id', 'preds', "other,%", "young,%"]]
 age.to_csv(args.supplementary, index=False, mode='a', sep='\t')
 ag = age.groupby('preds')
